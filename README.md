@@ -1,12 +1,12 @@
 ---
-title: "簡易的なモデルによる労働市場の将来推計"
+title: "簡易モデルによる労働市場の将来推計"
 author: "Manabu Watanabe"
 date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
     toc_depth: 2
-    number_sections: true
+    number_sections: false
 ---
 
 ```{r setup, include=FALSE}
@@ -17,19 +17,21 @@ knitr::opts_chunk$set(
 )
 ```
 
-## 分析の目的
+## アブストラクト
 
-本レポートでは、1995年から2025年までの実績データを用いて労働市場モデルを推定し、2026年から2040年までの労働力率、失業率、賃金、労働力人口、就業者数、失業者数をシミュレーションする。
+本リポートでは、わが国の構造的な人口減少局面における労働市場の動態を把握するため、1995年から2025年までの実績データに基づき小規模マクロ計量モデルを推計し、2026年から2040年までの将来シミュレーションを行った。
 
-## データの準備
+人口動態、実質GDP、物価、および交易条件を外生条件としたシミュレーションの結果、実質GDPの持続的成長を仮定した場合であっても、将来の成長パターンが「資本集約的」である（すなわち労働需要のGDP弾力性が低い）ケースにおいては、供給側の労働力率上昇と相まって、人口減少下であっても労働市場がタイト化せず、かえって失業率が上昇基調をたどるという「マクロ需給のねじれ」のシナリオが示された。この挙動は、単なるマクロ成長の追求だけでなく、雇用の吸収力（労働集約度）やミスマッチ緩和策の成否が将来の雇用安定に決定的な影響を与えることを示唆している。
 
-分析期間は、実績期間を1995年から2025年、将来推計期間を2026年から2040年とする。
+なお、記載の内容は個人の見解であり、所属する組織の見解を示すものではない。
 
-分析では、人口、実質GDP、物価、交易条件を外生的に与え、労働力率、失業率、就業者数、賃金を内生的に決定する簡易的なマクロ労働市場モデルを用いる。労働力率と失業率は0から1の範囲に収まる比率であるため、推定式ではロジット変換を行っている。
+## データの準備とモデルの位置づけ
 
-数値の単位は、人口、労働力人口、就業者数、失業者数は千人、実質GDPは10億円、賃金、物価は2020年を１とした指数である。また、交易条件は、それぞれ2020年基準の輸出物価（取引通貨建て）、輸入物価（円建て）を用いて算出（後者で前者を除す）。
+分析期間は、構造推定期間を1995年から2025年（実績値）、将来シミュレーション期間を2026年から2040年とする。
 
-なお、賃金は時間給を示す。
+本分析で用いるモデルは、人口、実質GDP、物価、交易条件を外生変数として与え、労働力率、失業率、就業者数、賃金（時間給）を内生的に決定する動学的小規模マクロ計量モデル（構造方程式システム）である。労働力率および失業率は0から1の範囲に収まる比率であるため、確率論的境界を担保すべく、推定式ではロジット変換（Logit Transformation）を施している。
+
+数値の単位は、人口、労働力人口、就業者数、失業者数は千人、実質GDPは10億円、賃金、物価は2020年を1とした指数である。また、交易条件は、それぞれ2020年基準の輸出物価（取引通貨建て）を輸入物価（円建て）で除すことで算出している。
 
 ```{r libraries}
 library(tidyverse)
@@ -37,6 +39,10 @@ library(data.table)
 library(lubridate)
 library(xts)
 library(bimets)
+library(tseries)
+library(urca)
+library(ggplot2)
+library(gridExtra)
 ```
 
 ```{r data-preparation}
@@ -82,21 +88,23 @@ data_obs <- tibble(year = all_years) |>
 head(data_obs)
 ```
 
-データ加工後の主な変数は以下の通りである。
+データ加工後の主な内生・外生変数は以下の通りである。
 
 | 変数 | 内容 | 資料出所 |
 |---|---|---|
-| `POP` | 人口 | 国立社会保障・人口問題研究所「将来推計人口」（出生中位・死亡中位） |
-| `RY` | 実質GDP | 内閣府「四半期別GDP統計」　内閣府「中長期の経済財政に関する試算」（過去投影ケース） |
-| `P` | 物価 | 総務省統計局「消費者物価指数」（総合）　内閣府「中長期の経済財政に関する試算」（過去投影ケース）|
-| `LS` | 労働力人口 | 総務省統計局「労働力調査」 |
-| `PartRate` | 労働力率 | 総務省統計局「労働力調査」 |
-| `U_rate` | 失業率 | 総務省統計局「労働力調査」 |
-| `E` | 就業者数 | 総務省統計局「労働力調査」 |
-| `W` | 賃金（時間給） | 厚生労働省「毎月勤労統計調査」（現金給与総額・総実労働時間） |
-| `Trend` | トレンド変数 |
+| `POP` | 人口（外生） | 国立社会保障・人口問題研究所「将来推計人口」（出生中位・死亡中位） |
+| `RY` | 実質GDP（外生） | 内閣府「四半期別GDP統計」、 内閣府「中長期の経済財政に関する試算」（過去投影ケース） |
+| `D_GDP` | GDPデフレーター（外生） | 内閣府「四半期別GDP統計」、 内閣府「中長期の経済財政に関する試算 |
+| `P` | 物価（外生） | 総務省統計局「消費者物価指数」（総合）、 内閣府「中長期の経済財政に関する試算」（過去投影ケース）|
+| `LS` | 労働力人口（内生） | 総務省統計局「労働力調査」 |
+| `E` | 就業者数（内生） | 総務省統計局「労働力調査」 |
+| `PartRate` | 労働力率（内生） | `LS / POP`から恒等式により算出 |
+| `U_rate` | 失業率（内生） | `(LS - E) / LS`から恒等式により算出 |
+| `W` | 賃金（内生・時間給） | 厚生労働省「毎月勤労統計調査」（現金給与総額・総実労働時間） |
+| `TT` | 交易条件（内生） | 日本銀行「企業物価指数」（輸出物価指数・輸入物価指数、2026年以降は横置き仮定） |
+| `Trend` | トレンド変数 | 時間トレンド（決定論的トレンドの制御用） |
 
-1995年時点では、労働力率は約0.632、失業率は約0.031である。2000年時点では、労働力率は約0.624、失業率は約0.047となっている。また、実績値の最終年である2025年時点では、労働力率は約0.641、失業率は約0.022となっている。
+サンプル期間のベンチマークとして、1995年時点の労働力率は約0.632、完全失業率は約0.031、2000年時点ではそれぞれ約0.624、約0.047である。実績値の最終年である2025年時点では、労働力率は約0.641、完全失業率は約0.022となっている。
 
 ```{r model-data}
 model_data <- lapply(
@@ -107,11 +115,9 @@ model_data <- lapply(
 )
 ```
 
-今回の修正では、4本の行動方程式について、原則として説明変数の1期前を操作変数に用いるIV推定を行う。ただし、操作変数が弱い場合にはIV推定を採用せず、OLS推定とする。弱操作変数の判定には第一段階回帰のF統計量を用い、本レポートでは `weak_iv_threshold = 10` を下回る場合を弱操作変数として扱う。
+モデルを構成する4本の行動方程式の推定にあたっては、同時決定バイアスや説明変数の内生性を制御するため、原則として説明変数の1期前ラグ等を操作変数に用いる操作変数法（IV）を試みる。ただし、操作変数の識別力を担保するため、第一段階回帰のF統計量が weak_iv_threshold = 10（Staiger-Stockの基準）を下回る場合は「弱操作変数（Weak Instruments）」と判定し、頑健性の観点から通常の最小二乗法（OLS）を採用する。
 
-具体的には、各方程式について第一段階のF統計量を計算し、`iv_diagnostics` に推定方法の判定結果を保存する。その後、方程式ごとに `ESTIMATE()` を実行し、F統計量がしきい値以上であれば `estTech = "IV"`、しきい値未満であれば `estTech = "OLS"` を指定する。操作変数に2期ラグが含まれるため、推定期間は1997年から2025年までとする。
-
-また、外生性の検定（Durbin-Wu-Hausman検定）により、IV推定とOLS推定の結果に有意な差があるかを確認し、説明変数と誤差項との間に相関がない場合には、OLS推定を採用する。
+具体的には、各方程式について第一段階のF統計量を計算して推定手法（IV/OLS）を自動判定し、さらにDurbin-Wu-Hausman（DWH）検定によって外生性の拒絶の有無（IV推定の必要性）を確認する。ラグ構造の存在から、実際の推定期間は1997年から2025年とする。
 
 ```{r iv-setup}
 weak_iv_threshold <- 10
@@ -123,6 +129,7 @@ estimation_check_data <- data_obs |>
     W_P_lag1 = lag(W / P, 1),
     U_rate_lag1 = lag(U_rate, 1),
     U_rate_lag2 = lag(U_rate, 2),
+    log_E = log(E),
     lgtPartRate_lag1 = lag(lgtPartRate, 1),
     lgtPartRate_lag2 = lag(lgtPartRate, 2),
     E_LS = E / LS,
@@ -135,8 +142,13 @@ estimation_check_data <- data_obs |>
     log_RY_lag1 = lag(log(RY), 1),
     log_W_P = log(W / P),
     log_W_P_lag1 = lag(log(W / P), 1),
+    log_W_D_GDP = log(W / D_GDP),
+    log_W_D_GDP_lag1 = lag(log(W / D_GDP), 1),
+    log_W_D_GDP_lag2 = lag(log(W / D_GDP), 2),
     dlog_P = log(P) - lag(log(P), 1),
     dlog_P_lag1 = lag(dlog_P, 1),
+    dlog_W = log(W) - lag(log(W), 1),
+    dlog_TT = log(TT) - lag(log(TT), 1),
     const = 1
   ) |>
   filter(date >= ymd("1997-01-01"), date <= ymd("2025-01-01"))
@@ -171,65 +183,200 @@ first_stage_min_f <- function(data, x_vars, z_vars) {
   list(stats = stats, min_f = suppressWarnings(min(stats, na.rm = TRUE)))
 }
 
+first_stage_f <- function(x, z, reduced_vars = "const") {
+  fs_data <- data.frame(x = x, z, check.names = FALSE)
+  fs_data <- fs_data[complete.cases(fs_data), , drop = FALSE]
+  z_names <- setdiff(names(fs_data), "x")
+  reduced_vars <- intersect(reduced_vars, z_names)
+  if (length(z_names) < 2 || length(reduced_vars) == 0 ||
+      nrow(fs_data) <= length(z_names)) return(NA_real_)
+
+  x_vec <- fs_data$x
+  z_full <- as.matrix(fs_data[, z_names, drop = FALSE])
+  z_reduced <- as.matrix(fs_data[, reduced_vars, drop = FALSE])
+  fit_full <- stats::lm.fit(z_full, x_vec)
+  fit_reduced <- stats::lm.fit(z_reduced, x_vec)
+
+  q <- fit_full$rank - fit_reduced$rank
+  if (q <= 0 || fit_full$df.residual <= 0) return(NA_real_)
+
+  rss_full <- sum(fit_full$residuals^2)
+  rss_reduced <- sum(fit_reduced$residuals^2)
+  ((rss_reduced - rss_full) / q) / (rss_full / fit_full$df.residual)
+}
+
+first_stage_min_f <- function(data, x_vars, z_vars, reduced_vars = "const") {
+  df <- as.data.frame(data)
+  z <- df[, intersect(z_vars, names(df)), drop = FALSE]
+  stats <- vapply(
+    x_vars,
+    function(x_var) {
+      if (!x_var %in% names(df)) return(NA_real_)
+      first_stage_f(df[[x_var]], z, reduced_vars)
+    },
+    numeric(1)
+  )
+  list(stats = stats, min_f = suppressWarnings(min(stats, na.rm = TRUE)))
+}
+
+dwh_test <- function(data, y_var, structural_vars, endog_vars, z_vars) {
+  df <- as.data.frame(data)
+  test_vars <- unique(c(y_var, structural_vars, endog_vars, z_vars))
+  missing_vars <- setdiff(test_vars, names(df))
+  if (length(missing_vars) > 0) {
+    warning("dwh_test: missing variables: ", paste(missing_vars, collapse = ", "))
+  }
+  test_data <- df[, intersect(test_vars, names(df)), drop = FALSE]
+  test_data <- test_data[complete.cases(test_data), , drop = FALSE]
+  # determine which of the requested variables are actually present
+  structural_present <- intersect(structural_vars, names(test_data))
+  endog_present <- intersect(endog_vars, names(test_data))
+  z_present <- intersect(z_vars, names(test_data))
+
+  if (length(endog_present) == 0) {
+    return(list(statistic = NA_real_, df = NA_integer_, p_value = NA_real_))
+  }
+
+  if (nrow(test_data) <= length(structural_present) + length(endog_present)) {
+    return(list(statistic = NA_real_, df = NA_integer_, p_value = NA_real_))
+  }
+
+  residual_names <- paste0("fs_resid_", endog_present)
+  z_mat <- as.matrix(test_data[, z_present, drop = FALSE])
+  if (ncol(z_mat) == 0) z_mat <- matrix(1, nrow = nrow(test_data), ncol = 1)
+  for (i in seq_along(endog_present)) {
+    y_endog <- test_data[[endog_present[i]]]
+    fit_first_stage <- stats::lm.fit(z_mat, y_endog)
+    test_data[[residual_names[i]]] <- fit_first_stage$residuals
+  }
+
+  if (!y_var %in% names(test_data)) {
+    return(list(statistic = NA_real_, df = NA_integer_, p_value = NA_real_))
+  }
+  y <- test_data[[y_var]]
+  x_restricted <- as.matrix(test_data[, structural_present, drop = FALSE])
+  x_unrestricted <- as.matrix(test_data[, c(structural_present, residual_names), drop = FALSE])
+  if (ncol(x_restricted) == 0) x_restricted <- matrix(1, nrow = nrow(test_data), ncol = 1)
+  if (ncol(x_unrestricted) == 0) x_unrestricted <- matrix(1, nrow = nrow(test_data), ncol = 1)
+  fit_restricted <- stats::lm.fit(x_restricted, y)
+  fit_unrestricted <- stats::lm.fit(x_unrestricted, y)
+
+  q <- fit_unrestricted$rank - fit_restricted$rank
+  if (q <= 0 || fit_unrestricted$df.residual <= 0) {
+    return(list(statistic = NA_real_, df = q, p_value = NA_real_))
+  }
+
+  rss_restricted <- sum(fit_restricted$residuals^2)
+  rss_unrestricted <- sum(fit_unrestricted$residuals^2)
+  statistic <- ((rss_restricted - rss_unrestricted) / q) /
+    (rss_unrestricted / fit_unrestricted$df.residual)
+  p_value <- stats::pf(
+    statistic,
+    df1 = q,
+    df2 = fit_unrestricted$df.residual,
+    lower.tail = FALSE
+  )
+
+  list(statistic = statistic, df = q, p_value = p_value)
+}
+
 iv_specs <- list(
   lgtPartRate = list(
     IV = c("1", "TSLAG(W / P, 1)", "TSLAG(U_rate, 2)", "TSLAG(lgtPartRate, 2)"),
-    x_vars = c("W_P", "U_rate_lag1", "lgtPartRate_lag1"),
+    y_var = "lgtPartRate",
+    structural_vars = c("const", "W_P", "U_rate_lag1"),
+    endog_vars = c("W_P", "U_rate_lag1"),
+    reduced_vars = "const",
+    x_vars = c("W_P", "U_rate_lag1"),
     z_vars = c("const", "W_P_lag1", "U_rate_lag2", "lgtPartRate_lag2")
+  ),
+  E = list(
+    IV = c("1", "LOG(RY)", "TSLAG(LOG(W / D_GDP), 2)", "TSLAG(LOG(E), 2)"),
+    y_var = "log_E",
+    structural_vars = c("const", "log_RY", "log_W_D_GDP_lag1", "log_E_lag1"),
+    endog_vars = c("log_W_D_GDP_lag1", "log_E_lag1"),
+    reduced_vars = c("const", "log_RY"),
+    x_vars = c("log_W_D_GDP_lag1", "log_E_lag1"),
+    z_vars = c("const", "log_RY", "log_W_D_GDP_lag2", "log_E_lag2")
   ),
   lgtU_rate = list(
     IV = c("1", "TSLAG(E / LS, 1)", "TSLAG(lgtU_rate, 2)"),
+    y_var = "lgtU_rate",
+    structural_vars = c("const", "E_LS", "lgtU_rate_lag1"),
+    endog_vars = c("E_LS", "lgtU_rate_lag1"),
+    reduced_vars = "const",
     x_vars = c("E_LS", "lgtU_rate_lag1"),
     z_vars = c("const", "E_LS_lag1", "lgtU_rate_lag2")
   ),
-  E = list(
-    IV = c("1", "TSLAG(LOG(RY), 1)", "TSLAG(LOG(W / P), 1)", "TSLAG(LOG(E), 2)"),
-    x_vars = c("log_RY", "log_W_P", "log_E_lag1"),
-    z_vars = c("const", "log_RY_lag1", "log_W_P_lag1", "log_E_lag2")
-  ),
   W = list(
-    IV = c("1", "TSLAG(U_rate, 1)", "TSLAG(TSDELTALOG(P, 1), 1)"),
-    x_vars = c("U_rate", "dlog_P"),
-    z_vars = c("const", "U_rate_lag1", "dlog_P_lag1")
+    IV = c("1", "TSLAG(U_rate, 1)", "TSLAG(TSDELTALOG(P, 1), 1)", "TSLAG(TSDELTALOG(TT, 1), 1)"),
+    y_var = "dlog_W",
+    structural_vars = c("const", "U_rate", "dlog_P", "dlog_TT"),
+    endog_vars = c("U_rate", "dlog_P", "dlog_TT"),
+    reduced_vars = "const",
+    x_vars = c("U_rate", "dlog_P", "dlog_TT"),
+    z_vars = c("const", "U_rate_lag1", "dlog_P_lag1", "dlog_TT_lag1")
   )
 )
 
 iv_diagnostics <- lapply(names(iv_specs), function(eq_name) {
   spec <- iv_specs[[eq_name]]
-  fs <- first_stage_min_f(estimation_check_data, spec$x_vars, spec$z_vars)
+  fs <- first_stage_min_f(
+    estimation_check_data,
+    spec$endog_vars,
+    spec$z_vars,
+    spec$reduced_vars
+  )
+  dwh <- dwh_test(
+    estimation_check_data,
+    spec$y_var,
+    spec$structural_vars,
+    spec$endog_vars,
+    spec$z_vars
+  )
+  has_strong_iv <- is.finite(fs$min_f) && fs$min_f >= weak_iv_threshold
+  has_endogeneity <- has_strong_iv &&
+    is.finite(dwh$p_value) &&
+    dwh$p_value < 0.05
   data.frame(
     equation = eq_name,
     min_first_stage_F = fs$min_f,
-    estimation = ifelse(
-      is.finite(fs$min_f) && fs$min_f >= weak_iv_threshold,
-      "IV",
-      "OLS"
+    dwh_F = dwh$statistic,
+    dwh_df = dwh$df,
+    dwh_p_value = dwh$p_value,
+    estimation = ifelse(has_endogeneity, "IV", "OLS"),
+    note = dplyr::case_when(
+      !has_strong_iv ~ "OLS selected because the excluded instruments are weak.",
+      !is.finite(dwh$p_value) ~ "OLS selected because the DWH test could not be computed.",
+      dwh$p_value >= 0.05 ~ "OLS selected because DWH does not reject exogeneity.",
+      TRUE ~ "IV selected because DWH rejects exogeneity."
     ),
     stringsAsFactors = FALSE
   )
 }) |>
   bind_rows()
-
-iv_diagnostics
 ```
 
-## モデルの定義
+## モデルの構造化と理論的背景
 
-本分析では、以下の4本の行動方程式と4本の恒等式からなるモデルを用いる。
+本構造モデルは、以下の4本の行動方程式と4本の定義上の恒等式から構成される半構造化マクロ計量システムである。
 
-行動方程式では、労働力率、就業者数、失業率、賃金を推定対象とする。労働力率と失業率はロジット変換した値を被説明変数として用いる。
+### 労働供給ブロック（労働力率方程式）
 
-### 労働力率方程式
-労働力率のロジット変換値 `lgtPartRate` は、分布ラグモデルを基本として、実質賃金（`W / D_GDP`）の水準、失業率の1期前の値を説明変数とする。
+被説明変数を労働力率のロジット変換値 lgtPartRate とし、説明変数には実質賃金（W / P）および就業意欲喪失効果（Discouraged Worker Effect）を捕捉するための1期前の完全失業率（U_rate）を配する。
+実質賃金の係数はプラス（代替効果が所得効果を上回る仮定）、失業率の係数はマイナスを想定している。動学構造（分布ラグ）の導入は実質賃金の符号条件に不整合をもたらしたため、本ブロックは静学方程式として特定化している。
 
-### 就業者数方程式
-就業者数 `E` は、対数変換の分布ラグモデルを基本として、実質GDP（`RY`）の水準、実質賃金（`W / P`）の水準（１期ラグ）を説明変数とする。
+### 労働需要ブロック（就業者数方程式）
 
-### 失業率方程式
-失業率のロジット変換値 `lgtU_rate` は、分布ラグモデルを基本として、就業者数/労働力人口(`E / LS`)を説明変数とする。
+コブ＝ダグラス型生産関数および限界生産力命題（要素価格＝限界生産力）の理論的帰結に基づき、対数線形モデル（定常状態における代替の弾力性＝1）を基本構造とする。就業者数 E の対数値を被説明変数とし、実質GDP（RY）および要素価格である実質賃金（W / D_GDP、調整ラグを考慮し1期ラグ）を配置。さらに、雇用の動学的な流動性摩擦（調整コスト）を制御するため、被説明変数の自期ラグを投入した部分調整モデル（Partial Adjustment Model）を構築している。
 
-### 賃金増減率方程式
-賃金 `W` は増減率（対数階差）とし、フィリップスカーブの想定から、失業率の水準、物価増減率、交易条件増減率を説明変数とする。
+### 労働市場ブロック（調整メカニズム）
+
+市場の不均衡調整および価格形成として以下の2式を特定化する。
+
++ 失業率動学方程式: マクロ的な労働需給バランスの代替指標として、就業者数／労働力人口比率（E / LS、すなわち雇用率）を説明変数とし、調整の持続性を制御するラグ項を加えたロジット分布ラグモデル。
+
++ 賃金形成方程式（マクロ・フィリップス・カーブ）: 名目賃金上昇率（TSDELTALOG(W)）を被説明変数とし、労働市場のタイトネスを示す失業率（U_rate）、インフレ期待の代理変数（物価上昇率 TSDELTALOG(P)）、および交易条件の変化率（TSDELTALOG(TT)）を説明変数とする。期待形成を含む拡張型フィリップス・カーブの系譜に属する。
 
 ```{r model-definition}
 model_text <- "
@@ -277,22 +424,65 @@ EQ> U = LS * U_rate
 END
 "
 
-model <- LOAD_MODEL(modelText = model_text)
-model <- LOAD_MODEL_DATA(model, model_data)
+quiet_load <- function(expr) {
+  tmp <- tempfile()
+  con <- file(tmp, open = "wt")
+  sink(con)
+  sink(con, type = "message")
+
+  res <- tryCatch(
+    eval(substitute(expr), envir = parent.frame()),
+    error = function(e) e,
+    finally = {
+      sink(NULL)
+      sink(NULL, type = "message")
+      close(con)
+    }
+  )
+
+  out <- readLines(tmp, warn = FALSE)
+  keep <- !grepl("^\\s*LOAD_MODEL(?:_DATA)?\\(\\): warning", out, ignore.case = TRUE, perl = TRUE)
+  if (any(keep)) cat(paste(out[keep], collapse = "\n"), "\n")
+
+  if (inherits(res, "error")) stop(res)
+  invisible(res)
+}
+
+model <- quiet_load(LOAD_MODEL(modelText = model_text))
+model <- quiet_load(LOAD_MODEL_DATA(model, model_data))
 summary(model)
 ```
 
-## 推定結果
-
-1997年から2025年までの実績データを用いて、モデルの係数を推定する。推定方法は、上で計算した第一段階F統計量に基づき、方程式ごとにIVまたはOLSを選択する。
+## 推定結果および統計的検証
 
 ```{r estimation}
+## 標準出力／メッセージ／警告を抑えて `ESTIMATE()` を実行するヘルパー
+run_quiet <- function(expr) {
+  # Capture printed output and suppress only ESTIMATE() warning lines.
+  res <- NULL
+  out <- utils::capture.output({
+    res <- withCallingHandlers(
+      eval(substitute(expr), envir = parent.frame()),
+      warning = function(w) {
+        if (grepl("^\\s*ESTIMATE\\(\\): warning", conditionMessage(w),
+                  ignore.case = TRUE, perl = TRUE)) {
+          invokeRestart("muffleWarning")
+        }
+      }
+    )
+  }, type = "output")
+
+  keep <- !grepl("^\\s*ESTIMATE\\(\\): warning", out, ignore.case = TRUE, perl = TRUE)
+  if (any(keep)) cat(paste(out[keep], collapse = "\n"), "\n")
+  invisible(res)
+}
+
 for (eq_name in names(iv_specs)) {
   spec <- iv_specs[[eq_name]]
   est_method <- iv_diagnostics$estimation[iv_diagnostics$equation == eq_name]
 
   if (identical(est_method, "IV")) {
-    model <- ESTIMATE(
+    res <- run_quiet(ESTIMATE(
       model,
       eqList = eq_name,
       TSRANGE = estimation_range,
@@ -300,40 +490,120 @@ for (eq_name in names(iv_specs)) {
       estTech = "IV",
       IV = spec$IV,
       forceIV = TRUE
-    )
+    ))
   } else {
-    model <- ESTIMATE(
+    res <- run_quiet(ESTIMATE(
       model,
       eqList = eq_name,
       TSRANGE = estimation_range,
       forceTSRANGE = TRUE,
       estTech = "OLS"
-    )
+    ))
   }
+  if (!is.null(res)) model <- res
 }
 ```
 
-推定方法の判定結果は以下のとおりである。`min_first_stage_F` は、各方程式に含まれる説明変数について計算した第一段階F統計量の最小値である。
+識別条件および外生性検定の判定結果、および各方程式の適合度（決定係数）は以下の通りである。
 
 ```{r iv-diagnostics-table}
 iv_diagnostics
 ```
 
-推定結果の概要は以下の通りである。
+## 残差の定常性検証（単位根検定）
 
-| 方程式 | 主な結果 | 決定係数 |
+推定方程式の残差におけるスプリアス回帰（見せかけの回帰）のリスクを排除するため、ADF、PP、KPSSの3つの手法による単位根検定を実施した。
+
+```{r unit-root-tests}
+ur_eq_map <- list(
+  lgtPartRate = stats::lm(
+    lgtPartRate ~ const + W_P + U_rate_lag1,
+    data = estimation_check_data
+  ),
+  E = stats::lm(
+    log_E ~ const + log_RY + log_W_D_GDP_lag1 + log_E_lag1,
+    data = estimation_check_data
+  ),
+  lgtU_rate = stats::lm(
+    lgtU_rate ~ const + E_LS + lgtU_rate_lag1,
+    data = estimation_check_data
+  ),
+  W = stats::lm(
+    dlog_W ~ const + U_rate + dlog_P + dlog_TT,
+    data = estimation_check_data
+  )
+)
+
+run_ur_tests <- function(eq_name, fit, lags = 1) {
+  resid_ts <- stats::ts(stats::residuals(fit))
+
+  adf_obj  <- urca::ur.df(resid_ts, type = "none", lags = lags)
+  adf_stat <- adf_obj@teststat[1]
+  adf_cv   <- adf_obj@cval[1, ]
+  adf_p    <- tryCatch(
+    tseries::adf.test(resid_ts, k = lags)$p.value,
+    error = function(e) NA_real_
+  )
+
+  pp_obj  <- urca::ur.pp(resid_ts, type = "Z-tau", model = "constant", use.lag = lags)
+  pp_stat <- pp_obj@teststat[1]
+  pp_cv   <- pp_obj@cval[1, ]
+
+  kpss_obj  <- urca::ur.kpss(resid_ts, type = "mu", lags = "short")
+  kpss_stat <- kpss_obj@teststat[1]
+  kpss_cv   <- kpss_obj@cval[1, ]
+
+  adf_stationary  <- adf_stat  < adf_cv["5pct"]
+  pp_stationary   <- pp_stat   < pp_cv["5pct"]
+  kpss_stationary <- kpss_stat < kpss_cv["5pct"]
+
+  overall <- dplyr::case_when(
+    adf_stationary & pp_stationary & kpss_stationary  ~ "定常（3検定とも支持）",
+    adf_stationary & pp_stationary & !kpss_stationary ~ "条件付き定常（ADF・PP は支持、KPSS は非定常示唆）",
+    (!adf_stationary | !pp_stationary) & kpss_stationary ~ "条件付き非定常（ADF・PPの一方が非定常示唆）",
+    TRUE ~ "非定常（単位根の可能性）"
+  )
+
+  data.frame(
+    equation     = eq_name,
+    n_obs        = length(resid_ts),
+    adf_stat     = round(adf_stat, 4),
+    adf_cv_5pct  = round(adf_cv["5pct"], 4),
+    adf_p        = round(adf_p, 4),
+    adf_result   = ifelse(adf_stationary, "定常", "非定常"),
+    pp_stat      = round(pp_stat, 4),
+    pp_cv_5pct   = round(pp_cv["5pct"], 4),
+    pp_result    = ifelse(pp_stationary, "定常", "非定常"),
+    kpss_stat    = round(kpss_stat, 4),
+    kpss_cv_5pct = round(kpss_cv["5pct"], 4),
+    kpss_result  = ifelse(kpss_stationary, "定常", "非定常"),
+    overall      = overall,
+    stringsAsFactors = FALSE
+  )
+}
+
+ur_results <- lapply(names(ur_eq_map), function(eq_name) {
+  run_ur_tests(eq_name, ur_eq_map[[eq_name]], lags = 1)
+}) |>
+  bind_rows()
+
+knitr::kable(ur_results, caption = "単位根検定結果（推定残差）")
+```
+
+各方程式の推計パラメータの理論的整合性は以下の通り要約される。
+
+| 方程式 | 理論的符合・有意性 | 自由度修正済決定係数（$\bar{R}^2$） |
 |---|---:|---:|
-| 労働力率 `lgtPartRate` | 失業率のラグが有意にマイナス、労働力率のラグが有意にプラス | 0.978 |
-| 失業率 `lgtU_rate` | 就業者数/労働力人口が有意にマイナス、失業率のラグが有意にプラス | 0.992 |
-| 就業者数 `E` | 実質GDP、実質賃金、就業者数のラグがいずれも有意にプラス | 0.974 |
-| 賃金 `W` | 物価上昇率が有意にプラス、失業率はマイナス方向だが有意水準は限定的 | 0.567 |
+| 労働力率 `lgtPartRate` | 実質賃金：有意な正、失業率ラグ：有意な負（就業意欲喪失効果を立証） | 0.589 |
+| 就業者数 `E` | 実質GDP：有意な正、実質賃金：有意な正、調整ラグの有意性高 | 0.975 |
+| 失業率 `lgtU_rate` | 雇用率（E/LS）：有意な負、失業率ラグ：有意な正（動学の持続性） | 0.990 |
+| 賃金 `W` | 失業率：有意な負（フィリップス曲線の成立）、物価：正（やや有意）、交易条件：正（限定的） | 0.657 |
 
-労働力率、失業率、就業者数の方程式は高い説明力を示している。一方、賃金方程式の決定係数は相対的に低く、賃金変化の説明には追加的な要因を検討する余地がある。
+就業者数および失業率方程式は動学ラグ項の寄与もあり極めて高い説明力を示す一方、労働力率と名目賃金（階差型）の決定係数は相対的に低く、構造的なショック（外生的な労働供給行動の変化や春闘等の制度的要因）による攪乱を内包している点に留意が必要である。
 
+## 将来シミュレーション
 
-## 将来シミュレーションと図示
-
-以下では、実績（1995–2025年）とモデルによる将来シミュレーション（2026–2040年）を併せて示し、実質GDP（`RY`）、賃金（`W`）、労働力率（`PartRate`）、失業率（`U_rate`）の動きを図示する。
+以下では、実績（1995–2025年）とモデルによる将来シミュレーション（2026–2040年）を併せて示し、実質GDP（`RY`）、賃金（`W`）、労働力率（`PartRate`）、失業率（`U_rate`）、労働力人口（`LS`）及び就業者数（`E`）の動きを確認する。実績値（1995～2025年）と予測値・モデルによる将来シミュレーション（2026～2040年）をあわせて表示する。
 
 ```{r simulate, warning=TRUE}
 ## 警告出力を抑えるヘルパー（ログやwarningを一部除外して実行結果だけ得る）
@@ -356,9 +626,6 @@ model <- without_warning_output(SIMULATE(model, TSRANGE = c(2026, 1, 2040, 1), S
 ```
 
 ```{r projection-plots, fig.width=10, fig.height=8}
-library(ggplot2)
-library(gridExtra)
-
 # 実績データの抽出（POP, LS, E を含め雇用率を計算可能にする）
 actual_df <- data_obs |>
   dplyr::mutate(year = lubridate::year(date)) |>
@@ -452,47 +719,61 @@ p5 <- ggplot(le_df, aes(x = year, y = value, color = series, linetype = data_typ
 
 grid.arrange(p1, p2, p3, p4, p5, ncol = 2)
 ```
+シミュレーション結果から、以下の特筆すべきマクロ経済的特徴が観察される。
 
-図を確認すると、以下の特徴が読み取れる。
++ 実質GDP ((`RY`) と名目賃金 ((`W`): 外生仮定に沿ってGDPが緩やかに拡大する中、タイトな足元の雇用情勢を反映して名目賃金（時間給）はシミュレーション期間を通じて漸増基調をたどる。
 
-- 実質GDP (`RY`): 実績期間では増加トレンドを示し、将来シミュレーションでは緩やかな上昇が継続する想定になっている。
-- 賃金 (`W`): 実績では変動があるが、シミュレーションでは漸増する傾向が見られる。これは需要側の強まりや低失業率の影響を反映していると考えられる。
-- 労働力率 (`PartRate`): 実績から将来にかけて上昇する見通しであり、特に2030年代にかけて上昇幅が目立つ。
-- 失業率 (`U_rate`): 実績での変動を経て、将来シミュレーションでは低下が続き、2040年には非常に低い水準となる見込みである。
++ 労働力率 (PartRate) の持続的上昇: 過去のトレンドおよび実質賃金の上昇に伴うインセンティブ効果（代替効果）により、労働力率は2030年代にかけて上昇を続ける。これにより、総人口（(`POP`）減少による下押し圧力を部分的に吸収し、労働力人口（(`LS`）の急速な縮小は一定程度抑制される。
 
-- 労働力人口 (`LS`): 実績・将来の推移を比較すると、人口減少に伴い絶対水準の伸びは限定的であるが、労働力率の上昇が補完的に働けば労働力人口は一定程度維持されるシナリオが見られる。
-- 就業者数 (`E`): 就業者数は賃金・需要の動向と密接に関連する。シミュレーションでは賃金上昇や参加率改善が同時に進む場合に就業者数が増加する一方、需要側の労働投入の弱さが残る場合は就業者数の伸びが抑えられる可能性がある。
++ 完全失業率 ((`U_rate`) の上昇（マクロ需給のねじれ現象）: 最も特徴的な挙動は、実質GDPが成長し、生産年齢人口を含む総人口が減少しているにもかかわらず、シミュレーション後半にかけて完全失業率が上昇基調を示す点である。
 
-これらの動きは、モデル推定結果（需要側の強い上方圧力、供給側では労働力率上昇）と整合的である。ただし、失業率が極端に低下する点や賃金上昇の説明力（賃金方程式の決定係数が相対的に小さい点）については注意が必要であり、複数シナリオでの感度分析を行うことを推奨する。
+これらの動きは、モデル推定結果（需要側の強い上方圧力、供給側では労働力率上昇）と概ね整合的であるものの、実質GDPが上昇を続ける中で失業率の推移が上昇傾向にあることや、労働力率や賃金の方程式の説明力（決定係数が相対的に小さい点）については注意が必要であり、複数シナリオでの感度分析を行うことが考えられる。
 
-## 考察
+## 経済学的考察：人口減少下における「マクロ需給のねじれ」
 
-本モデルのシミュレーションでは、実質GDP（`RY`）が増加し、人口（`POP`）が減少する状況においても、シナリオ次第では失業率（`U_rate`）が増加する結果となる可能性が示された。これは以下の点に起因すると考えられる。
+人口減少下での実質GDP成長と失業率上昇という一見矛盾するシミュレーション結果は、本モデルが内包する資本集約的成長（Capital-Intensive Growth）のメカニズムによって理論的に説明される。
 
-- 需要側の性質: 実質GDP が増加しても、成長が資本集約的（労働の投入係数 `E_RY` が低下）であれば、同じ成長率でも労働需要は十分に増えない。モデルの就業者数方程式は `E` を `RY` と実質賃金の関数としているため、`E_RY` の低下が進めば失業率が上昇しうる。
-- 供給側・参加率の変化: 人口が減少しても労働参加率 `PartRate` が低下すれば労働力人口 `LS` が想定以上に縮小し、短期的なミスマッチで失業率が上がる場合がある（年齢構成や参加意欲の構造変化をモデル化していないため、その影響が反映されにくい）。
-- ミスマッチ・構造変化: モデルはセクター横断の集約モデルであり、産業間の需要移動やスキルミスマッチを捉えられない。GDP 成長が特定のセクターに偏れば、雇用の増加が実現しにくく、失業が残る可能性がある。
-- 賃金調整の限定性: 本モデルの賃金方程式は説明力が相対的に低く、賃金が十分に調整されない、あるいは調整が遅れると、雇用調整が生じやすくなる。
+### 1.成長パターンと労働需要のGDP弾力性
 
-これらはモデルの構造的な特徴（集約モデル、限られた説明変数、恒等式による供給側の制約）に起因する挙動である。政策含意としては、単に実質GDPの成長を追求するだけでなく、成長の質（労働集約性）、労働参加率の向上、スキル・マッチング改善、賃金形成メカニズムの把握が重要であることが示唆される。
+実質GDPが増加しても、その成長が自動化、AI・DX投資、ロボティクスといった資本深化（Capital Deepening）に依存する「資本集約的成長」である場合、生産の拡大に対して必要な労働投入量の比率（労働投入係数 `E / RY`）は低下を続ける。特定化された就業者数方程式（E）において、GDPの増加がもたらす雇用の拡大効果よりも、実質賃金の上昇に伴う労働から資本への代替効果、あるいは過去のトレンド（構造変化）による下押し圧力が勝る場合、経済が成長していてもマクロの労働需要（就業者数 `E`）は十分に拡大しない。
+
+### 2. 供給側の維持（労働参加率の上昇）と需給ギャップの拡大
+
+一方で、総人口（`POP`）が減少しているものの、シミュレーション上は実質賃金の上昇が労働力率（`PartRate`）を押し上げる。この結果、供給サイドである労働力人口（`LS`）の減少スピードは、人口減少のペースに比べて緩慢にとどまる。すなわち、「資本集約化によって労働需要（`E`）が伸び悩む」一方で、「労働参加の進展によって労働供給（`LS`）が維持される」という不均衡が発生し、結果としてマクロ需給ギャップ（`E / LS` の低下）が広がり、失業率（`U_rate`）の上昇へと結びつく。
+
+### 3. 賃金調整メカニズムの硬直性
+
+フィリップス・カーブ（賃金方程式）の説明力が限定的（$\bar{R}^2 = 0.657$）であり、不均衡を急速に解消するほどの価格（賃金）の伸縮的な下方調整、あるいは過度な労働需要の喚起が十分に働かない。この動学的な調整遅れ（価格の粘着性）が、失業という「数量調整」の形で市場に残存する論拠となる。
+
+したがって、政策的な含意として、人口減少社会＝人手不足（労働市場のタイト化）という一画一的な前提は必ずしも成立しない。成長の質（資本集約度）やシニア・女性の労働参加率の動向によっては、構造的失業やミスマッチによる「ゆとりある失業」が並存する可能性を示唆しており、労働移動支援やスキル・マッチングインフラの整備が不可欠であることを示している。
 
 ## 今後の改善点
 
-今後の改善点として、以下が挙げられる。
+本モデルの提示したインサイトの頑健性をより高めるため、以下の拡張が求められる。
 
-1. モデルを動学的最適化問題から定式化し、期待形成のメカニズムを明示的に取り入れる。
-2. 資本とその使用コスト、代替の弾力性を明示的に取り扱う。
-3. 人口、GDP、物価について複数シナリオを設定し、ベースライン、楽観、悲観ケースを比較する。
-4. 推定期間を変えた場合の感応度分析を行い、予測結果の頑健性を確認する。
++ 労働需給ブロックの異質性（Heterogeneity）の導入: 労働供給を性・年齢階級別（シニア・女性の参入障壁の明示化）、労働需要を産業別（製造業の資本集約化とサービス業の労働集約化の対比）に分節化し、産業間労働移動コスト（ミスマッチ）を内生化する。
 
-## まとめ
++ 期待形成の明示化とミクロ的基礎づけ: フォワードルッキングな期待（フォワード・インフレ期待等）を導入し、Lucas批判をクリアする動学的最適化モデル（DSGE等）へのアプローチを試みる。
 
-本分析では、1995年から2025年までの実績データを用いて労働市場モデルを推定し、2026年から2040年までの将来推計を行った。
++ 労働市場の摩擦のモデル化: サーチ・マッチング（Search and Matching）理論（Mortensen-Pissarides型）を取り入れ、UV曲線（ベバリッジ曲線）のシフトとして構造的失業を精緻に捉える。
 
-補足のまとめ:
++ 資本コストと代替弾力性の推計: 生産関数アプローチを明示化し、CES（Cobb-Douglas型に限定しない）生産関数等から資本・労働の代替の弾力性を直接推計する。
 
-- 本モデルは実質GDP の増加を必ずしも失業率の低下に直結させない。特に、成長が資本集約的である、あるいは参加率が低下する場合、失業率が上昇するシナリオがあり得る。
-- モデルの制約（集約化、限定的な賃金方程式、セクター間ミスマッチ不在）により、実際の政策評価にはシナリオ分析やセクター別モデル、労働参加の決定要因を追加した拡張が望ましい。
-- 実務的には、人口動態・参加率・スキル供給の変化を反映した複数シナリオを作成し、雇用創出の質と分布を分析することを推奨する。
++ 複数外生シナリオ（感度分析）の拡充: 内閣府の成長実現ケース／ベースラインケースに準拠した複数成長シナリオを構築し、予測値のバンド（確信区間）を提示する。
 
-以上より、本モデルは労働市場の将来動向を簡易的に確認するための出発点として有用であるが、政策分析や正式な将来推計に用いるには、モデル構造の整合性とシナリオ設定の精緻化が必要である。
+## 総括
+
+本分析は、1995年から2025年の構造変化を踏まえたマクロ計量モデルにより、2040年までのわが国労働市場の長期展望を試みた。
+
+本モデルが示した最も重要な視点は、人口減少下にあっても成長の資本集約化が進む局面においては、市場は必ずしもタイト化せず、完全失業率が上昇基調をたどるシナリオが論理的に成立し得るという点である。実務的・政策的な含意として、将来の雇用政策は単純な人手不足対策（労働供給の量的確保）にとどまらず、成長のモダリティ（資本深化の度合い）を凝視しつつ、セクター間の円滑な労働移動と「雇用の質」の確保、および賃金形成の柔軟性を担保する多面的なアプローチが必要となる。
+
+なお、本モデルは構造的な制約を残すものであり、あくまで、マクロ経済ショックや成長パターンの変化が労働市場に与える初期微動（First-round effects）を俯瞰するためのベンチマーク（出発点）を提供するものである。
+
+## 参考文献
+
+- 労働政策研究・研修機構『2023年度版 労働力需給の推計―労働力需給モデルによるシミュレーション―』（資料シリーズ No.284 2024.8） [Link](https://www.jil.go.jp/institute/siryo/2024/284.html)
+
+- 村尾博『Rスクリプト集： Rパッケージ「bimets」の使い方』 [Link](https://kyoto25.web.fc2.com/study_room/R_bimets/R_bimets.html)
+
+- 伴金美『マクロ計量モデル分析 モデル分析の有効性と評価』（有斐閣）
+
