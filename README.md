@@ -747,3 +747,6 @@ grid.arrange(p1, p2, p3, p4, p5, ncol = 2)
 - 村尾博『Rスクリプト集： Rパッケージ「bimets」の使い方』 [Link](https://kyoto25.web.fc2.com/study_room/R_bimets/R_bimets.html)
 
 - 伴金美『マクロ計量モデル分析 モデル分析の有効性と評価』（有斐閣）
+
+###（注記）
+レポジトリに別途掲載しているLabourForce.rでは、労働力率の断層を調整するアドファクター（残差`lfpr_last_obs_residual`を10年で解消）を追加しており、労働力人口および就業者数の推移は、より自然な形になります。
