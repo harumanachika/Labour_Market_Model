@@ -89,10 +89,14 @@ estimation_check_data <- data_obs |>
     lgtU_rate_lag1 = dplyr::lag(lgtU_rate, 1),
     lgtU_rate_lag2 = dplyr::lag(lgtU_rate, 2),
     log_E = log(E),
+    lgtPartRate_lag1 = dplyr::lag(lgtPartRate, 1),
+    lgtPartRate_lag2 = dplyr::lag(lgtPartRate, 2),
     log_E_lag1 = dplyr::lag(log(E), 1),
     log_E_lag2 = dplyr::lag(log(E), 2),
     log_RY = log(RY),
     log_RY_lag1 = dplyr::lag(log(RY), 1),
+    log_W_P = log(W / P),
+    log_W_P_lag1 = dplyr::lag(log(W / P), 1),
     log_W_D_GDP = log(W / D_GDP),
     log_W_D_GDP_lag1 = dplyr::lag(log(W / D_GDP), 1),
     log_W_D_GDP_lag2 = dplyr::lag(log(W / D_GDP), 2),
@@ -289,13 +293,13 @@ without_warning_output <- function(expr) {
 
 iv_specs <- list(
   lgtPartRate = list(
-    IV = c("1", "TSLAG(W / P, 1)", "TSLAG(U_rate, 2)"),
+    IV = c("1", "TSLAG(W / P, 1)", "TSLAG(U_rate, 2)", "TSLAG(lgtPartRate, 2)"),
     y_var = "lgtPartRate",
     structural_vars = c("const", "W_P", "U_rate_lag1"),
     endog_vars = c("W_P", "U_rate_lag1"),
     reduced_vars = "const",
     x_vars = c("W_P", "U_rate_lag1"),
-    z_vars = c("const", "W_P_lag1", "U_rate_lag2")
+    z_vars = c("const", "W_P_lag1", "U_rate_lag2", "lgtPartRate_lag2")
   ),
   E = list(
     IV = c("1", "LOG(RY)", "TSLAG(LOG(W / D_GDP), 2)", "TSLAG(LOG(E), 2)"),

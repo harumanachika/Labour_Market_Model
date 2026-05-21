@@ -1,0 +1,416 @@
+> source("c:\\Users\\harum\\GitHub\\Labor_Force_Estimation\\MacroModel\\lib.r"$
+> ####作業ディレクトリ -------------------------------------------------------$
+> 
+> setwd("c:/Users/harum/GitHub/Labor_Force_Estimation/MacroModel/Sample/")
+> par(mfrow = c(1, 1))
+> source("c:\\Users\\harum\\GitHub\\Public\\Labour_Market_Model\\LabourForce.r$
+           spec real_wage_coef real_wage_t adj_r_squared       aic dw_stat                                         
+1 current_level     -0.1726798   -5.285752     0.9750511 -228.9872 1.00038
+     spec real_wage_coef real_wage_t adj_r_squared      aic   dw_stat
+1 current       2.751123    5.548978     0.6747654 -106.882 0.5191846
+   year    ADD_LFPR
+1  2025 0.000000000
+2  2026 0.046452785
+3  2027 0.041807507
+4  2028 0.037162228
+5  2029 0.032516950
+6  2030 0.027871671
+7  2031 0.023226393
+8  2032 0.018581114
+9  2033 0.013935836
+10 2034 0.009290557
+11 2035 0.004645279
+12 2036 0.000000000
+13 2037 0.000000000
+14 2038 0.000000000
+15 2039 0.000000000
+16 2040 0.000000000
+     equation min_first_stage_F      dwh_F dwh_df  dwh_p_value estimation
+1 lgtPartRate         18.952080 11.7096587      2 0.0002825344         IV
+2           E         44.064937  2.0086065      2 0.1570376678        OLS
+3   lgtU_rate         97.969495 10.6152903      2 0.0004981372         IV
+4           W          4.029205  0.6093828      3 0.6160102532        OLS
+                                                     note
+1             IV selected because DWH rejects exogeneity.
+2    OLS selected because DWH does not reject exogeneity.
+3             IV selected because DWH rejects exogeneity.
+4 OLS selected because the excluded instruments are weak.
+file:///C:/Users/harum/GitHub/Labor_Force_Estimation/MacroModel/Sample/temp.html screenshot completed
+Analyzing behaviorals...
+Analyzing identities...
+Optimizing...
+Loaded model "model_text":
+    4 behaviorals
+    6 identities
+   14 coefficients
+...LOAD MODEL OK
+Load model data "model_data" into model "model_text"...
+...LOAD MODEL DATA OK
+
+BIMETS MODEL
+-----------------------------------
+name:                    model_text
+built with bimets:       4.1.2
+behaviorals:             4
+identities:              6
+coefficients:            14
+model data:              OK
+forward looking:         FALSE
+fully estimated:         FALSE
+fully simulated:         FALSE
+renormed:                FALSE
+fully stochastic sim.:   FALSE
+optimized:               FALSE
+
+Estimate the Model model_text:
+the number of behavioral equations to be estimated is 1.
+The total number of coefficients is 3.
+
+_________________________________________
+
+BEHAVIORAL EQUATION: lgtPartRate
+Estimation Technique: IV
+
+lgtPartRate       = -   3.414536    
+                        T-stat. -4.984197   ***
+
+                    +   4.041484    (W/P)
+                        T-stat. 5.869087    ***
+
+                    -   1.814678    TSLAG(U_rate,1)
+                        T-stat. -2.034015   
+
+
+STATs:
+R-Squared                      : 0.6187194   
+Adjusted R-Squared             : 0.5893901   
+Durbin-Watson Statistic        : 0.8284665   
+Sum of squares of residuals    : 0.04080577  
+Standard Error of Regression   : 0.03961632  
+Log of the Likelihood Function : 54.06108    
+F-statistic                    : 21.09562    
+F-probability                  : 3.598998e-06
+Akaike's IC                    : -100.1222   
+Schwarz's IC                   : -94.65298   
+Mean of Dependent Variable     : 0.4564061   
+Number of Observations         : 29
+Number of Degrees of Freedom   : 26
+Current Sample (year-period)   : 1997-1 / 2025-1
+
+
+Signif. codes:   *** 0.001  ** 0.01  * 0.05  
+
+
+...ESTIMATE OK
+
+Estimate the Model model_text:
+the number of behavioral equations to be estimated is 1.
+The total number of coefficients is 4.
+
+_________________________________________
+
+BEHAVIORAL EQUATION: E
+Estimation Technique: OLS
+
+LOG(E)            = -   1.951507    
+                        T-stat. -4.145889   ***
+
+                    +   0.2204287   LOG(RY)
+                        T-stat. 7.899909    ***
+
+                    -   0.1726798   TSLAG(LOG(W/D_GDP),1)
+                        T-stat. -5.285752   ***
+
+                    +   0.9126629   TSLAG(LOG(E),1)
+                        T-stat. 24.8649     ***
+
+
+STATs:
+R-Squared                      : 0.9777242   
+Adjusted R-Squared             : 0.9750511   
+Durbin-Watson Statistic        : 1.00038     
+Sum of squares of residuals    : 0.0004476408
+Standard Error of Regression   : 0.004231505 
+Log of the Likelihood Function : 119.4936    
+F-statistic                    : 365.7647    
+F-probability                  : 0           
+Akaike's IC                    : -228.9872   
+Schwarz's IC                   : -222.1507   
+Mean of Dependent Variable     : 11.08008    
+Number of Observations         : 29
+Number of Degrees of Freedom   : 25
+Current Sample (year-period)   : 1997-1 / 2025-1
+
+
+Signif. codes:   *** 0.001  ** 0.01  * 0.05  
+
+
+...ESTIMATE OK
+
+Estimate the Model model_text:
+the number of behavioral equations to be estimated is 1.
+The total number of coefficients is 3.
+
+_________________________________________
+
+BEHAVIORAL EQUATION: lgtU_rate
+Estimation Technique: IV
+
+lgtU_rate           =   18.96264    
+                        T-stat. 7.602797    ***
+
+                    -   22.384      (E/LS)
+                        T-stat. -7.658428   ***
+
+                    +   0.2135515   TSLAG(lgtU_rate,1)
+                        T-stat. 2.139544    *
+
+
+STATs:
+R-Squared                      : 0.9904222   
+Adjusted R-Squared             : 0.9896855   
+Durbin-Watson Statistic        : 0.9821942   
+Sum of squares of residuals    : 0.02139929  
+Standard Error of Regression   : 0.02868884  
+Log of the Likelihood Function : 63.42034    
+F-statistic                    : 1344.309    
+F-probability                  : 0           
+Akaike's IC                    : -118.8407   
+Schwarz's IC                   : -113.3715   
+Mean of Dependent Variable     : -3.266036   
+Number of Observations         : 29
+Number of Degrees of Freedom   : 26
+Current Sample (year-period)   : 1997-1 / 2025-1
+
+
+Signif. codes:   *** 0.001  ** 0.01  * 0.05  
+
+
+...ESTIMATE OK
+
+Estimate the Model model_text:
+the number of behavioral equations to be estimated is 1.
+The total number of coefficients is 4.
+
+_________________________________________
+
+BEHAVIORAL EQUATION: W
+Estimation Technique: OLS
+
+TSDELTALOG(W,1)     =   0.03192942  
+                        T-stat. 3.374162    **
+
+                    -   0.7565593   U_rate
+                        T-stat. -3.317523   **
+
+                    +   0.4611056   TSDELTALOG(P,1)
+                        T-stat. 2.520774    *
+
+                    +   0.004656619 TSDELTALOG(TT,1)
+                        T-stat. 0.2870256   
+
+
+STATs:
+R-Squared                      : 0.6934      
+Adjusted R-Squared             : 0.656608    
+Durbin-Watson Statistic        : 2.330276    
+Sum of squares of residuals    : 0.001830924 
+Standard Error of Regression   : 0.008557859 
+Log of the Likelihood Function : 99.06912    
+F-statistic                    : 18.84649    
+F-probability                  : 1.327998e-06
+Akaike's IC                    : -188.1382   
+Schwarz's IC                   : -181.3018   
+Mean of Dependent Variable     : 0.005494887 
+Number of Observations         : 29
+Number of Degrees of Freedom   : 25
+Current Sample (year-period)   : 1997-1 / 2025-1
+
+
+Signif. codes:   *** 0.001  ** 0.01  * 0.05  
+
+
+...ESTIMATE OK
+
+ ======================================================================== 
+  単位根検定結果（推定残差）
+  検定: ADF（H0: 単位根あり）/ PP（H0: 単位根あり）/ KPSS（H0: 定常）
+  有意水準 5%  |  ラグ次数: 1
+======================================================================== 
+
+【方程式: lgtPartRate 】  観測数: 29
+  ADF  : 統計量 = -2.0837  臨界値(5%) = -1.9500  → 定常  (p = 0.7527)
+  PP   : 統計量 = -1.9670  臨界値(5%) = -2.9705  → 非定常
+  KPSS : 統計量 =  0.2604  臨界値(5%) =  0.4630  → 定常
+  総合判定: 条件付き非定常（ADF・PPの一方が非定常示唆）
+
+【方程式: E           】  観測数: 29
+  ADF  : 統計量 = -2.8442  臨界値(5%) = -1.9500  → 定常  (p = 0.2398)
+  PP   : 統計量 = -3.9433  臨界値(5%) = -2.9705  → 定常
+  KPSS : 統計量 =  0.1038  臨界値(5%) =  0.4630  → 定常
+  総合判定: 定常（3検定とも支持）
+
+【方程式: lgtU_rate   】  観測数: 29
+  ADF  : 統計量 = -4.5036  臨界値(5%) = -1.9500  → 定常  (p = 0.0113)
+  PP   : 統計量 = -2.9135  臨界値(5%) = -2.9705  → 非定常
+  KPSS : 統計量 =  0.1352  臨界値(5%) =  0.4630  → 定常
+  総合判定: 条件付き非定常（ADF・PPの一方が非定常示唆）
+
+【方程式: W           】  観測数: 29
+  ADF  : 統計量 = -3.7938  臨界値(5%) = -1.9500  → 定常  (p = 0.0474)
+  PP   : 統計量 = -7.1622  臨界値(5%) = -2.9705  → 定常
+  KPSS : 統計量 =  0.1384  臨界値(5%) =  0.4630  → 定常
+  総合判定: 定常（3検定とも支持）
+
+------------------------------------------------------------------------ 
+※ ADF・PP で単位根が棄却され、KPSS で定常が維持される場合を
+   「定常な残差」と判断します。残差が非定常の場合は、方程式の
+   再定式化（変数変換・共和分関係の確認）を検討してください。
+======================================================================== 
+
+SIMULATE(): endogenous variable "lgtPartRate" has a constant adjustment from year-period 2026-1 to 2040-1.
+
+
+
+
+
+
+
+
+
+
+
+Simulation:     100.00 %
+...SIMULATE OK
+
+      Date, Prd., model$simulation$PartRate
+
+      2026, 1   ,  0.6446748     
+      2027, 1   ,  0.6523147     
+      2028, 1   ,  0.6611204     
+      2029, 1   ,  0.6689515     
+      2030, 1   ,  0.6761764     
+      2031, 1   ,  0.682616      
+      2032, 1   ,  0.6882616     
+      2033, 1   ,  0.6933453     
+      2034, 1   ,  0.6979496     
+      2035, 1   ,  0.7022407     
+      2036, 1   ,  0.7060759     
+      2037, 1   ,  0.7100331     
+      2038, 1   ,  0.7134114     
+      2039, 1   ,  0.716531      
+      2040, 1   ,  0.7193539     
+
+
+      Date, Prd., model$simulation$U_rate
+
+      2026, 1   ,  0.02279129    
+      2027, 1   ,  0.02112638    
+      2028, 1   ,  0.02112121    
+      2029, 1   ,  0.02152001    
+      2030, 1   ,  0.02228185    
+      2031, 1   ,  0.02322999    
+      2032, 1   ,  0.02414757    
+      2033, 1   ,  0.02496455    
+      2034, 1   ,  0.0257006     
+      2035, 1   ,  0.02635228    
+      2036, 1   ,  0.02708213    
+      2037, 1   ,  0.02812975    
+      2038, 1   ,  0.02877989    
+      2039, 1   ,  0.02935519    
+      2040, 1   ,  0.02981382    
+
+
+      Date, Prd., model$simulation$W
+
+      2026, 1   ,  1.131208      
+      2027, 1   ,  1.156749      
+      2028, 1   ,  1.181241      
+      2029, 1   ,  1.205871      
+      2030, 1   ,  1.230422      
+      2031, 1   ,  1.254594      
+      2032, 1   ,  1.278231      
+      2033, 1   ,  1.301491      
+      2034, 1   ,  1.324416      
+      2035, 1   ,  1.347234      
+      2036, 1   ,  1.369706      
+      2037, 1   ,  1.391305      
+      2038, 1   ,  1.412536      
+      2039, 1   ,  1.433453      
+      2040, 1   ,  1.454163      
+
+
+      Date, Prd., model$simulation$LS
+
+      2026, 1   ,  70467.92      
+      2027, 1   ,  71066.78      
+      2028, 1   ,  71775.01      
+      2029, 1   ,  72345.79      
+      2030, 1   ,  72836.19      
+      2031, 1   ,  73212.78      
+      2032, 1   ,  73465.88      
+      2033, 1   ,  73628.87      
+      2034, 1   ,  73698.7       
+      2035, 1   ,  73697.71      
+      2036, 1   ,  73640.19      
+      2037, 1   ,  73561.31      
+      2038, 1   ,  73390.88      
+      2039, 1   ,  73192         
+      2040, 1   ,  72957.8       
+
+
+      Date, Prd., model$simulation$E
+
+      2026, 1   ,  69073.59      
+      2027, 1   ,  69839.2       
+      2028, 1   ,  70483.67      
+      2029, 1   ,  70983.16      
+      2030, 1   ,  71351.65      
+      2031, 1   ,  71604.8       
+      2032, 1   ,  71760.27      
+      2033, 1   ,  71835.87      
+      2034, 1   ,  71830.5       
+      2035, 1   ,  71758.35      
+      2036, 1   ,  71627.61      
+      2037, 1   ,  71447.95      
+      2038, 1   ,  71232.87      
+      2039, 1   ,  70989.75      
+      2040, 1   ,  70724.72      
+
+
+      Date, Prd., model$simulation$E_est
+
+      2026, 1   ,  68861.87      
+      2027, 1   ,  69565.39      
+      2028, 1   ,  70259.04      
+      2029, 1   ,  70788.91      
+      2030, 1   ,  71213.26      
+      2031, 1   ,  71512.05      
+      2032, 1   ,  71691.86      
+      2033, 1   ,  71790.76      
+      2034, 1   ,  71804.6       
+      2035, 1   ,  71755.6       
+      2036, 1   ,  71645.86      
+      2037, 1   ,  71492.05      
+      2038, 1   ,  71278.7       
+      2039, 1   ,  71043.44      
+      2040, 1   ,  70782.65      
+
+
+      Date, Prd., model$simulation$U
+
+      2026, 1   ,  1606.055      
+      2027, 1   ,  1501.384      
+      2028, 1   ,  1515.975      
+      2029, 1   ,  1556.882      
+      2030, 1   ,  1622.925      
+      2031, 1   ,  1700.733      
+      2032, 1   ,  1774.023      
+      2033, 1   ,  1838.112      
+      2034, 1   ,  1894.101      
+      2035, 1   ,  1942.103      
+      2036, 1   ,  1994.333      
+      2037, 1   ,  2069.261      
+      2038, 1   ,  2112.182      
+      2039, 1   ,  2148.565      
+      2040, 1   ,  2175.151      
