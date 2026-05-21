@@ -126,76 +126,49 @@ estimation_range <- c(1997, 1, 2025, 1)
 estimation_check_data <- data_obs |>
   mutate(
     W_P = W / P,
-    W_P_lag1 = lag(W / P, 1),
+    log_E = log(E),
+    log_RY = log(RY),
+    log_W_D_GDP = log(W / D_GDP),
+    dlog_P = log(P) - lag(log(P), 1),
+    dlog_W = log(W) - lag(log(W), 1),
+    dlog_TT = log(TT) - lag(log(TT), 1),
+    W_P_lag1 = lag(W_P, 1),
     U_rate_lag1 = lag(U_rate, 1),
     U_rate_lag2 = lag(U_rate, 2),
-    log_E = log(E),
     lgtPartRate_lag1 = lag(lgtPartRate, 1),
     lgtPartRate_lag2 = lag(lgtPartRate, 2),
     E_LS = E / LS,
-    E_LS_lag1 = lag(E / LS, 1),
+    E_LS_lag1 = lag(E_LS, 1),
     lgtU_rate_lag1 = lag(lgtU_rate, 1),
     lgtU_rate_lag2 = lag(lgtU_rate, 2),
-    log_E_lag1 = lag(log(E), 1),
-    log_E_lag2 = lag(log(E), 2),
-    log_RY = log(RY),
-    log_RY_lag1 = lag(log(RY), 1),
-    log_W_P = log(W / P),
-    log_W_P_lag1 = lag(log(W / P), 1),
-    log_W_D_GDP = log(W / D_GDP),
-    log_W_D_GDP_lag1 = lag(log(W / D_GDP), 1),
-    log_W_D_GDP_lag2 = lag(log(W / D_GDP), 2),
-    dlog_P = log(P) - lag(log(P), 1),
+    log_E_lag1 = lag(log_E, 1),
+    log_E_lag2 = lag(log_E, 2),
+    log_RY_lag1 = lag(log_RY, 1),
+    log_W_D_GDP_lag1 = lag(log_W_D_GDP, 1),
+    log_W_D_GDP_lag2 = lag(log_W_D_GDP, 2),
     dlog_P_lag1 = lag(dlog_P, 1),
-    dlog_W = log(W) - lag(log(W), 1),
-    dlog_TT = log(TT) - lag(log(TT), 1),
+    dlog_TT_lag1 = lag(dlog_TT, 1),
     const = 1
   ) |>
   filter(date >= ymd("1997-01-01"), date <= ymd("2025-01-01"))
-
-first_stage_f <- function(x, z) {
-  fs_data <- data.frame(x = x, z, check.names = FALSE)
-  fs_data <- fs_data[complete.cases(fs_data), , drop = FALSE]
-  z_names <- setdiff(names(fs_data), "x")
-  if (length(z_names) < 2 || nrow(fs_data) <= length(z_names)) return(NA_real_)
-
-  x_vec <- fs_data$x
-  z_full <- as.matrix(fs_data[, z_names, drop = FALSE])
-  z_reduced <- matrix(1, nrow = nrow(fs_data), ncol = 1)
-  fit_full <- lm.fit(z_full, x_vec)
-  fit_reduced <- lm.fit(z_reduced, x_vec)
-
-  q <- fit_full$rank - fit_reduced$rank
-  if (q <= 0 || fit_full$df.residual <= 0) return(NA_real_)
-
-  rss_full <- sum(fit_full$residuals^2)
-  rss_reduced <- sum(fit_reduced$residuals^2)
-  ((rss_reduced - rss_full) / q) / (rss_full / fit_full$df.residual)
-}
-
-first_stage_min_f <- function(data, x_vars, z_vars) {
-  z <- as.data.frame(data)[, z_vars, drop = FALSE]
-  stats <- vapply(
-    x_vars,
-    function(x_var) first_stage_f(data[[x_var]], z),
-    numeric(1)
-  )
-  list(stats = stats, min_f = suppressWarnings(min(stats, na.rm = TRUE)))
-}
 
 first_stage_f <- function(x, z, reduced_vars = "const") {
   fs_data <- data.frame(x = x, z, check.names = FALSE)
   fs_data <- fs_data[complete.cases(fs_data), , drop = FALSE]
   z_names <- setdiff(names(fs_data), "x")
   reduced_vars <- intersect(reduced_vars, z_names)
-  if (length(z_names) < 2 || length(reduced_vars) == 0 ||
-      nrow(fs_data) <= length(z_names)) return(NA_real_)
+  if (length(z_names) < 2 || length(reduced_vars) == 0) {
+    return(NA_real_)
+  }
 
-  x_vec <- fs_data$x
   z_full <- as.matrix(fs_data[, z_names, drop = FALSE])
   z_reduced <- as.matrix(fs_data[, reduced_vars, drop = FALSE])
-  fit_full <- stats::lm.fit(z_full, x_vec)
-  fit_reduced <- stats::lm.fit(z_reduced, x_vec)
+  if (nrow(fs_data) <= ncol(z_full) || nrow(fs_data) <= ncol(z_reduced)) {
+    return(NA_real_)
+  }
+
+  fit_full <- stats::lm.fit(z_full, fs_data$x)
+  fit_reduced <- stats::lm.fit(z_reduced, fs_data$x)
 
   q <- fit_full$rank - fit_reduced$rank
   if (q <= 0 || fit_full$df.residual <= 0) return(NA_real_)
@@ -209,11 +182,8 @@ first_stage_min_f <- function(data, x_vars, z_vars, reduced_vars = "const") {
   df <- as.data.frame(data)
   z <- df[, intersect(z_vars, names(df)), drop = FALSE]
   stats <- vapply(
-    x_vars,
-    function(x_var) {
-      if (!x_var %in% names(df)) return(NA_real_)
-      first_stage_f(df[[x_var]], z, reduced_vars)
-    },
+    intersect(x_vars, names(df)),
+    function(x_var) first_stage_f(df[[x_var]], z, reduced_vars),
     numeric(1)
   )
   list(stats = stats, min_f = suppressWarnings(min(stats, na.rm = TRUE)))
@@ -719,6 +689,7 @@ p5 <- ggplot(le_df, aes(x = year, y = value, color = series, linetype = data_typ
 
 grid.arrange(p1, p2, p3, p4, p5, ncol = 2)
 ```
+
 シミュレーション結果から、以下の特筆すべきマクロ経済的特徴が観察される。
 
 + 実質GDP ((`RY`) と名目賃金 ((`W`): 外生仮定に沿ってGDPが緩やかに拡大する中、タイトな足元の雇用情勢を反映して名目賃金（時間給）はシミュレーション期間を通じて漸増基調をたどる。
@@ -745,7 +716,7 @@ grid.arrange(p1, p2, p3, p4, p5, ncol = 2)
 
 フィリップス・カーブ（賃金方程式）の説明力が限定的（$\bar{R}^2 = 0.657$）であり、不均衡を急速に解消するほどの価格（賃金）の伸縮的な下方調整、あるいは過度な労働需要の喚起が十分に働かない。この動学的な調整遅れ（価格の粘着性）が、失業という「数量調整」の形で市場に残存する論拠となる。
 
-したがって、政策的な含意として、人口減少社会＝人手不足（労働市場のタイト化）という画一的な前提は必ずしも成立しない。成長の質（資本集約度）やシニア・女性の労働参加率の動向によっては、構造的失業やミスマッチによる「ゆとりある失業」が並存する可能性を示唆しており、労働移動支援やスキル・マッチングインフラの整備が不可欠であることを示している。
+したがって、政策的な含意として、人口減少社会＝人手不足（労働市場のタイト化）という一画一的な前提は必ずしも成立しない。成長の質（資本集約度）やシニア・女性の労働参加率の動向によっては、構造的失業やミスマッチによる「ゆとりある失業」が並存する可能性を示唆しており、労働移動支援やスキル・マッチングインフラの整備が不可欠であることを示している。
 
 ## 今後の改善点
 
@@ -776,4 +747,3 @@ grid.arrange(p1, p2, p3, p4, p5, ncol = 2)
 - 村尾博『Rスクリプト集： Rパッケージ「bimets」の使い方』 [Link](https://kyoto25.web.fc2.com/study_room/R_bimets/R_bimets.html)
 
 - 伴金美『マクロ計量モデル分析 モデル分析の有効性と評価』（有斐閣）
-
