@@ -1,9 +1,4 @@
-> source("c:\\Users\\harum\\GitHub\\Labor_Force_Estimation\\MacroModel\\lib.r"$
-> ####作業ディレクトリ -------------------------------------------------------$
-> 
-> setwd("c:/Users/harum/GitHub/Labor_Force_Estimation/MacroModel/Sample/")
-> par(mfrow = c(1, 1))
-> source("c:\\Users\\harum\\GitHub\\Public\\Labour_Market_Model\\LabourForce.r$
+> source("c:\\Users\\harum\\GitHub\\Labor_Force_Estimation\\MacroModel\\Sample$
            spec real_wage_coef real_wage_t adj_r_squared       aic dw_stat                                         
 1 current_level     -0.1726798   -5.285752     0.9750511 -228.9872 1.00038
      spec real_wage_coef real_wage_t adj_r_squared      aic   dw_stat
@@ -414,3 +409,6 @@ Simulation:     100.00 %
       2038, 1   ,  2112.182      
       2039, 1   ,  2148.565      
       2040, 1   ,  2175.151      
+
+>
+     

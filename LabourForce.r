@@ -713,3 +713,100 @@ simulation_csv <- dplyr::bind_rows(actual_results, simulation_results) |>
 
 dir.create("output", showWarnings = FALSE, recursive = TRUE)
 readr::write_csv(simulation_csv, "output/labour_force_simulation.csv")
+
+
+# 描画
+# 実績データの抽出（POP, LS, E を含め雇用率を計算可能にする）
+actual_df <- data_obs |>
+  dplyr::mutate(year = lubridate::year(date)) |>
+  dplyr::filter(year %in% hist_years) |>
+  dplyr::select(year, POP, RY, W, PartRate, U_rate, LS, E) |>
+  dplyr::mutate(
+    employment_rate = E / POP,
+    data_type = "actual"
+  )
+
+# シミュレーション結果の整形（bimets 型か生の数値か両方に対応）
+get_sim <- function(name) {
+  if (!(name %in% names(model$simulation))) return(rep(NA_real_, length(proj_years)))
+  v <- model$simulation[[name]]
+  val <- tryCatch({
+    as.numeric(fromBIMETStoTS(v))
+  }, error = function(e) {
+    x <- tryCatch(as.numeric(v), error = function(e2) NA_real_)
+    if (is.numeric(x)) x else rep(NA_real_, length(proj_years))
+  })
+  if (length(val) != length(proj_years)) {
+    if (length(val) > length(proj_years)) val <- tail(val, length(proj_years))
+    else val <- c(val, rep(NA_real_, length(proj_years) - length(val)))
+  }
+  val
+}
+
+# 将来人口（POP）は data_obs に含まれているため先に抽出
+proj_pop <- data_obs |>
+  dplyr::mutate(year = lubridate::year(date)) |>
+  dplyr::filter(year %in% proj_years) |>
+  dplyr::pull(POP)
+
+sim_df <- tibble(
+  year = proj_years,
+  POP = proj_pop,
+  RY = get_sim("RY"),
+  W = get_sim("W"),
+  PartRate = get_sim("PartRate"),
+  U_rate = get_sim("U_rate"),
+  LS = get_sim("LS"),
+  E = get_sim("E"),
+  data_type = "simulation"
+)
+
+sim_df <- sim_df |>
+  dplyr::mutate(
+    employment_rate = ifelse(!is.na(E) & !is.na(POP), E / POP, NA_real_)
+  )
+
+# 外生の予測値（データファイルに含まれる RY）を取り出してプロットに重ねる
+exog_df <- data_obs |>
+  dplyr::mutate(year = lubridate::year(date)) |>
+  dplyr::filter(year %in% proj_years) |>
+  dplyr::select(year, POP, RY, W = W, PartRate = PartRate, U_rate = U_rate, LS = LS, E = E) |>
+  dplyr::mutate(
+    data_type = "exogenous"
+  )
+
+combined <- dplyr::bind_rows(actual_df, sim_df, exog_df)
+
+p1 <- ggplot(combined, aes(x = year, y = RY, color = data_type)) +
+  geom_line() + geom_point(size = 1) +
+  labs(title = "実質GDP (RY)", x = "Year", y = "RY") +
+  theme_minimal()
+
+p2 <- ggplot(combined, aes(x = year, y = W, color = data_type)) +
+  geom_line() + geom_point(size = 1) +
+  labs(title = "賃金 (W)", x = "Year", y = "W") +
+  theme_minimal()
+
+p3 <- ggplot(combined, aes(x = year, y = PartRate, color = data_type)) +
+  geom_line() + geom_point(size = 1) +
+  labs(title = "労働力率 (PartRate)", x = "Year", y = "PartRate") +
+  theme_minimal()
+
+p4 <- ggplot(combined, aes(x = year, y = U_rate, color = data_type)) +
+  geom_line() + geom_point(size = 1) +
+  labs(title = "失業率 (U_rate)", x = "Year", y = "U_rate") +
+  theme_minimal()
+
+## 労働力人口と就業者数を同一図にプロット
+le_df <- combined |>
+  dplyr::select(year, data_type, LS, E) |>
+  tidyr::pivot_longer(cols = c(LS, E), names_to = "series", values_to = "value")
+
+p5 <- ggplot(le_df, aes(x = year, y = value, color = series, linetype = data_type)) +
+  geom_line() + geom_point(size = 1) +
+  labs(title = "労働力人口 (LS) と 就業者数 (E)", x = "Year", y = "Number of People (thousands)") +
+  theme_minimal()
+
+grid.arrange(p1, p2, ncol = 2)
+grid.arrange(p3, p4, ncol = 2)
+grid.arrange(p5, ncol = 1)
