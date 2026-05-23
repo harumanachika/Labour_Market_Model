@@ -19,7 +19,7 @@ suppressWarnings(suppressPackageStartupMessages({
 
 ####作業ディレクトリ ---------------------------------------------------------
 
-setwd("c:/Users/harum/GitHub/Labor_Force_Estimation/MacroModel/Sample/")
+setwd("c:/Users/harum/GitHub/Public/Labour_Market_Model/")
 par(mfrow = c(1, 1))
 # hgd()
 
