@@ -3,9 +3,7 @@
 # 使用する変数：人口（Pop）、GDP（Y）、物価（P）、労働力率（PartRate）、就業者数（E）、賃金（W）
 
 suppressWarnings(suppressPackageStartupMessages({
-  library(readr)
-  library(dplyr)
-  library(tibble)
+  library(tidyverse)
   library(lubridate)
   library(xts)
   library(bimets)
@@ -15,6 +13,7 @@ suppressWarnings(suppressPackageStartupMessages({
   library(DiagrammeR) # フローチャート作成用に追加
   library(htmlwidgets)
   library(webshot2)
+  library(gridExtra)
 }))
 
 ####作業ディレクトリ ---------------------------------------------------------
