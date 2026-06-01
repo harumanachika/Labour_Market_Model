@@ -101,7 +101,7 @@ head(data_obs)
 | `PartRate` | 労働力率（内生） | `LS / POP`から恒等式により算出 |
 | `U_rate` | 失業率（内生） | `(LS - E) / LS`から恒等式により算出 |
 | `W` | 賃金（内生・時間給） | 厚生労働省「毎月勤労統計調査」（現金給与総額・総実労働時間） |
-| `TT` | 交易条件（内生） | 日本銀行「企業物価指数」（輸出物価指数・輸入物価指数、2026年以降は横置き仮定） |
+| `TT` | 交易条件（外生） | 日本銀行「企業物価指数」（輸出物価指数・輸入物価指数、2026年以降は横置き仮定） |
 | `Trend` | トレンド変数 | 時間トレンド（決定論的トレンドの制御用） |
 
 サンプル期間のベンチマークとして、1995年時点の労働力率は約0.632、完全失業率は約0.031、2000年時点ではそれぞれ約0.624、約0.047である。実績値の最終年である2025年時点では、労働力率は約0.641、完全失業率は約0.022となっている。
@@ -656,6 +656,10 @@ exog_df <- data_obs |>
   )
 
 combined <- dplyr::bind_rows(actual_df, sim_df, exog_df)
+combined <- combined |>
+  dplyr::mutate(
+    E_RY = dplyr::if_else(!is.na(E) & !is.na(RY) & RY != 0, E / RY, NA_real_)
+  )
 
 p1 <- ggplot(combined, aes(x = year, y = RY, color = data_type)) +
   geom_line() + geom_point(size = 1) +
@@ -689,6 +693,32 @@ p5 <- ggplot(le_df, aes(x = year, y = value, color = series, linetype = data_typ
 
 grid.arrange(p1, p2, p3, p4, p5, ncol = 2)
 ```
+
+上記の主要指標に加えて、経済成長がどの程度の雇用吸収力を伴っているかを確認するため、労働集約度を `E / RY`（実質GDP1単位当たりの就業者数）として算出する。この指標は、実質GDPの増加に対して就業者数がどの程度必要とされるかを示す誘導指標であり、低下傾向は、同じ実質GDPをより少ない労働投入で生産する方向、すなわち資本集約化・労働節約的な成長パターンが強まっている可能性を示す。
+
+```{r labor-intensity-plot, fig.width=10, fig.height=5}
+labor_intensity_df <- combined |>
+  dplyr::filter(data_type %in% c("actual", "simulation")) |>
+  dplyr::filter(!is.na(E_RY))
+
+ggplot(labor_intensity_df, aes(x = year, y = E_RY, color = data_type)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 1.5) +
+  geom_vline(xintercept = max(hist_years) + 0.5, linetype = "dashed", color = "gray50") +
+  scale_color_manual(
+    values = c(actual = "#1f77b4", simulation = "#d62728"),
+    labels = c(actual = "実績", simulation = "予測")
+  ) +
+  labs(
+    title = "労働集約度（E / RY）の推移",
+    x = "Year",
+    y = "E / RY",
+    color = NULL
+  ) +
+  theme_minimal()
+```
+
+労働集約度の推移をみると、予測期間においても `E / RY` が低下する場合、実質GDPの増加ほどには就業者数が増えないことを意味する。このため、人口減少によって労働供給が制約される局面であっても、需要側の雇用吸収力が弱まれば、労働市場のタイト化ではなく、失業率の上昇や需給ミスマッチの拡大として表れる可能性がある。ただし、本指標は `E` と `RY` から計算されるモデル内の派生指標であり、産業別の資本深化や技術代替を直接識別するものではない。
 
 シミュレーション結果から、以下の特筆すべきマクロ経済的特徴が観察される。
 
