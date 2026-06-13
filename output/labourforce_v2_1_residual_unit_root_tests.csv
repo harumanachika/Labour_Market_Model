@@ -1,0 +1,7 @@
+equation,n_obs,adf_stat,adf_cv_5pct,adf_p,adf_result,pp_stat,pp_cv_5pct,pp_result,kpss_stat,kpss_cv_5pct,kpss_result,overall
+lgtPartRate,29,-2.7773,-1.95,0.361,stationary,-2.6238,-2.9705,nonstationary,0.0929,0.463,stationary,conditionally_nonstationary_adf_or_pp
+lgtH,29,-5.0452,-1.95,0.01,stationary,-4.3821,-2.9705,stationary,0.0453,0.463,stationary,stationary_supported_by_all
+lgtU_rate,29,-4.653,-1.95,0.01,stationary,-3.1167,-2.9705,stationary,0.3035,0.463,stationary,stationary_supported_by_all
+W,29,-3.7938,-1.95,0.0474,stationary,-7.1622,-2.9705,stationary,0.1384,0.463,stationary,stationary_supported_by_all
+P,29,-2.9909,-1.95,0.1361,stationary,-4.4926,-2.9705,stationary,0.1533,0.463,stationary,stationary_supported_by_all
+D_C,29,-2.3766,-1.95,0.3083,stationary,-2.2577,-2.9705,nonstationary,0.4241,0.463,stationary,conditionally_nonstationary_adf_or_pp

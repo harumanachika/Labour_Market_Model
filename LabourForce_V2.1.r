@@ -213,6 +213,8 @@ suppressWarnings(suppressPackageStartupMessages({
   library(xts)
   library(ggplot2)
   library(gridExtra)
+  library(tseries)
+  library(urca)
 }))
 
 without_warning_output <- function(expr) {
@@ -275,12 +277,27 @@ model_frame <- tibble::tibble(year = all_years) |>
     log_W_PY = log(W_PY),
     log_C_REAL_PC = log(C_REAL_PC),
     log_W_P = log(W / P),
+    lgtPartRate_lag2 = dplyr::lag(lgtPartRate, 2),
     lgtH_lag1 = dplyr::lag(lgtH, 1),
+    lgtH_lag2 = dplyr::lag(lgtH, 2),
     U_rate_lag1 = dplyr::lag(U_rate, 1),
+    U_rate_lag2 = dplyr::lag(U_rate, 2),
     lgtU_rate_lag1 = dplyr::lag(lgtU_rate, 1),
+    lgtU_rate_lag2 = dplyr::lag(lgtU_rate, 2),
     dlog_W = log(W) - dplyr::lag(log(W), 1),
+    dlog_W_lag1 = dplyr::lag(dlog_W, 1),
     dlog_P = log(P) - dplyr::lag(log(P), 1),
-    dlog_TT = log(TT) - dplyr::lag(log(TT), 1)
+    dlog_P_lag1 = dplyr::lag(dlog_P, 1),
+    dlog_D_C = log(D_C) - dplyr::lag(log(D_C), 1),
+    dlog_TT = log(TT) - dplyr::lag(log(TT), 1),
+    dlog_TT_lag1 = dplyr::lag(dlog_TT, 1),
+    W_P = W / P,
+    W_P_lag1 = dplyr::lag(W_P, 1),
+    log_W_P_lag1 = dplyr::lag(log_W_P, 1),
+    log_C_REAL_PC_lag1 = dplyr::lag(log_C_REAL_PC, 1),
+    L_MHS = L / MHS,
+    L_MHS_lag1 = dplyr::lag(L_MHS, 1),
+    const = 1
   )
 
 ces_labor_for_sim <- model_frame |>
@@ -365,6 +382,221 @@ model_data <- lapply(
     )
   ),
   as.bimets
+)
+
+weak_iv_threshold <- 10
+
+estimation_check_data <- model_frame |>
+  dplyr::filter(year >= 1997, year <= 2025)
+
+first_stage_f <- function(x, z, reduced_vars = "const") {
+  fs_data <- data.frame(x = x, z, check.names = FALSE)
+  fs_data <- fs_data[stats::complete.cases(fs_data), , drop = FALSE]
+  z_names <- setdiff(names(fs_data), "x")
+  reduced_vars <- intersect(reduced_vars, z_names)
+  if (length(z_names) < 2 || length(reduced_vars) == 0 ||
+      nrow(fs_data) <= length(z_names)) return(NA_real_)
+
+  x_vec <- fs_data$x
+  z_full <- as.matrix(fs_data[, z_names, drop = FALSE])
+  z_reduced <- as.matrix(fs_data[, reduced_vars, drop = FALSE])
+  fit_full <- stats::lm.fit(z_full, x_vec)
+  fit_reduced <- stats::lm.fit(z_reduced, x_vec)
+
+  q <- fit_full$rank - fit_reduced$rank
+  if (q <= 0 || fit_full$df.residual <= 0) return(NA_real_)
+
+  rss_full <- sum(fit_full$residuals^2)
+  rss_reduced <- sum(fit_reduced$residuals^2)
+  ((rss_reduced - rss_full) / q) / (rss_full / fit_full$df.residual)
+}
+
+first_stage_min_f <- function(data, x_vars, z_vars, reduced_vars = "const") {
+  z <- as.data.frame(data)[, z_vars, drop = FALSE]
+  stats <- vapply(
+    x_vars,
+    function(x_var) first_stage_f(data[[x_var]], z, reduced_vars),
+    numeric(1)
+  )
+  min_f <- if (any(is.finite(stats))) {
+    suppressWarnings(min(stats[is.finite(stats)]))
+  } else {
+    NA_real_
+  }
+  list(stats = stats, min_f = min_f)
+}
+
+dwh_test <- function(data, y_var, structural_vars, endog_vars, z_vars) {
+  test_vars <- unique(c(y_var, structural_vars, endog_vars, z_vars))
+  test_data <- as.data.frame(data)[, test_vars, drop = FALSE]
+  test_data <- test_data[stats::complete.cases(test_data), , drop = FALSE]
+
+  if (nrow(test_data) <= length(structural_vars) + length(endog_vars)) {
+    return(list(statistic = NA_real_, df = NA_integer_, p_value = NA_real_))
+  }
+
+  residual_names <- paste0("fs_resid_", endog_vars)
+  z <- as.matrix(test_data[, z_vars, drop = FALSE])
+  for (i in seq_along(endog_vars)) {
+    fit_first_stage <- stats::lm.fit(z, test_data[[endog_vars[i]]])
+    test_data[[residual_names[i]]] <- fit_first_stage$residuals
+  }
+
+  y <- test_data[[y_var]]
+  x_restricted <- as.matrix(test_data[, structural_vars, drop = FALSE])
+  x_unrestricted <- as.matrix(test_data[, c(structural_vars, residual_names), drop = FALSE])
+  fit_restricted <- stats::lm.fit(x_restricted, y)
+  fit_unrestricted <- stats::lm.fit(x_unrestricted, y)
+
+  q <- fit_unrestricted$rank - fit_restricted$rank
+  if (q <= 0 || fit_unrestricted$df.residual <= 0) {
+    return(list(statistic = NA_real_, df = q, p_value = NA_real_))
+  }
+
+  rss_restricted <- sum(fit_restricted$residuals^2)
+  rss_unrestricted <- sum(fit_unrestricted$residuals^2)
+  statistic <- ((rss_restricted - rss_unrestricted) / q) /
+    (rss_unrestricted / fit_unrestricted$df.residual)
+  p_value <- stats::pf(
+    statistic,
+    df1 = q,
+    df2 = fit_unrestricted$df.residual,
+    lower.tail = FALSE
+  )
+
+  list(statistic = statistic, df = q, p_value = p_value)
+}
+
+structural_residuals <- function(data, spec, method) {
+  test_vars <- unique(c(spec$y_var, spec$structural_vars, spec$z_vars))
+  test_data <- as.data.frame(data)[, test_vars, drop = FALSE]
+  test_data <- test_data[stats::complete.cases(test_data), , drop = FALSE]
+  if (nrow(test_data) <= length(spec$structural_vars)) {
+    return(numeric(0))
+  }
+
+  y <- test_data[[spec$y_var]]
+  x <- as.matrix(test_data[, spec$structural_vars, drop = FALSE])
+
+  if (identical(method, "IV")) {
+    z <- as.matrix(test_data[, spec$z_vars, drop = FALSE])
+    x_hat <- z %*% qr.solve(z, x)
+    beta <- tryCatch(
+      as.numeric(qr.solve(crossprod(x_hat, x), crossprod(x_hat, y))),
+      error = function(e) rep(NA_real_, ncol(x))
+    )
+  } else {
+    beta <- tryCatch(
+      as.numeric(stats::lm.fit(x, y)$coefficients),
+      error = function(e) rep(NA_real_, ncol(x))
+    )
+  }
+
+  if (any(!is.finite(beta))) return(numeric(0))
+  as.numeric(y - x %*% beta)
+}
+
+iv_specs <- list(
+  lgtPartRate = list(
+    IV = c("1", "TSLAG(W / P, 1)", "TSLAG(U_rate, 2)", "TSLAG(lgtPartRate, 2)"),
+    y_var = "lgtPartRate",
+    structural_vars = c("const", "W_P", "U_rate_lag1"),
+    endog_vars = c("W_P", "U_rate_lag1"),
+    reduced_vars = "const",
+    x_vars = c("W_P", "U_rate_lag1"),
+    z_vars = c("const", "W_P_lag1", "U_rate_lag2", "lgtPartRate_lag2")
+  ),
+  lgtH = list(
+    IV = c("1", "TSLAG(LOG(W / P), 1)", "TSLAG(LOG(C_REAL_PC), 1)", "TSLAG(lgtH, 2)"),
+    y_var = "lgtH",
+    structural_vars = c("const", "log_W_P", "log_C_REAL_PC", "lgtH_lag1"),
+    endog_vars = c("log_W_P", "log_C_REAL_PC", "lgtH_lag1"),
+    reduced_vars = "const",
+    x_vars = c("log_W_P", "log_C_REAL_PC", "lgtH_lag1"),
+    z_vars = c("const", "log_W_P_lag1", "log_C_REAL_PC_lag1", "lgtH_lag2")
+  ),
+  lgtU_rate = list(
+    IV = c("1", "TSLAG(L / MHS, 1)", "TSLAG(lgtU_rate, 2)"),
+    y_var = "lgtU_rate",
+    structural_vars = c("const", "L_MHS", "lgtU_rate_lag1"),
+    endog_vars = c("L_MHS", "lgtU_rate_lag1"),
+    reduced_vars = "const",
+    x_vars = c("L_MHS", "lgtU_rate_lag1"),
+    z_vars = c("const", "L_MHS_lag1", "lgtU_rate_lag2")
+  ),
+  W = list(
+    IV = c("1", "TSLAG(U_rate, 1)", "TSLAG(TSDELTALOG(P, 1), 1)", "TSLAG(TSDELTALOG(TT, 1), 1)"),
+    y_var = "dlog_W",
+    structural_vars = c("const", "U_rate", "dlog_P", "dlog_TT"),
+    endog_vars = c("U_rate", "dlog_P", "dlog_TT"),
+    reduced_vars = "const",
+    x_vars = c("U_rate", "dlog_P", "dlog_TT"),
+    z_vars = c("const", "U_rate_lag1", "dlog_P_lag1", "dlog_TT_lag1")
+  ),
+  P = list(
+    IV = c("1", "TSLAG(TSDELTALOG(W, 1), 1)", "TSLAG(TSDELTALOG(TT, 1), 1)"),
+    y_var = "dlog_P",
+    structural_vars = c("const", "dlog_W", "dlog_TT"),
+    endog_vars = c("dlog_W", "dlog_TT"),
+    reduced_vars = "const",
+    x_vars = c("dlog_W", "dlog_TT"),
+    z_vars = c("const", "dlog_W_lag1", "dlog_TT_lag1")
+  ),
+  D_C = list(
+    IV = c("1", "TSLAG(TSDELTALOG(P, 1), 1)"),
+    y_var = "dlog_D_C",
+    structural_vars = c("const", "dlog_P"),
+    endog_vars = c("dlog_P"),
+    reduced_vars = "const",
+    x_vars = c("dlog_P"),
+    z_vars = c("const", "dlog_P_lag1")
+  )
+)
+
+iv_diagnostics <- lapply(names(iv_specs), function(eq_name) {
+  spec <- iv_specs[[eq_name]]
+  fs <- first_stage_min_f(
+    estimation_check_data,
+    spec$endog_vars,
+    spec$z_vars,
+    spec$reduced_vars
+  )
+  dwh <- dwh_test(
+    estimation_check_data,
+    spec$y_var,
+    spec$structural_vars,
+    spec$endog_vars,
+    spec$z_vars
+  )
+  has_strong_iv <- is.finite(fs$min_f) && fs$min_f >= weak_iv_threshold
+  has_endogeneity <- has_strong_iv &&
+    is.finite(dwh$p_value) &&
+    dwh$p_value < 0.05
+  data.frame(
+    equation = eq_name,
+    min_first_stage_F = fs$min_f,
+    weak_iv_threshold = weak_iv_threshold,
+    weak_instruments = !has_strong_iv,
+    dwh_F = dwh$statistic,
+    dwh_df = dwh$df,
+    dwh_p_value = dwh$p_value,
+    estimation = ifelse(has_endogeneity, "IV", "OLS"),
+    note = dplyr::case_when(
+      !has_strong_iv ~ "OLS selected because the excluded instruments are weak.",
+      !is.finite(dwh$p_value) ~ "OLS selected because the DWH test could not be computed.",
+      dwh$p_value >= 0.05 ~ "OLS selected because DWH does not reject exogeneity.",
+      TRUE ~ "IV selected because DWH rejects exogeneity."
+    ),
+    stringsAsFactors = FALSE
+  )
+}) |>
+  dplyr::bind_rows()
+
+print(iv_diagnostics)
+
+readr::write_csv(
+  iv_diagnostics,
+  "output/labourforce_v2_1_iv_diagnostics.csv"
 )
 
 demand_eq_text <- sprintf(
@@ -470,17 +702,131 @@ model <- without_warning_output(LOAD_MODEL(modelText = model_text))
 model <- without_warning_output(LOAD_MODEL_DATA(model, model_data))
 summary(model)
 
-estimate_eqs <- c("lgtPartRate", "lgtH", "lgtU_rate", "W", "P", "D_C")
+for (eq_name in names(iv_specs)) {
+  spec <- iv_specs[[eq_name]]
+  est_method <- iv_diagnostics$estimation[iv_diagnostics$equation == eq_name]
 
-for (eq_name in estimate_eqs) {
-  model <- without_warning_output(ESTIMATE(
-    model,
-    eqList = eq_name,
-    TSRANGE = estimation_range,
-    forceTSRANGE = TRUE,
-    estTech = "OLS"
-  ))
+  if (identical(est_method, "IV")) {
+    model <- without_warning_output(ESTIMATE(
+      model,
+      eqList = eq_name,
+      TSRANGE = estimation_range,
+      forceTSRANGE = TRUE,
+      estTech = "IV",
+      IV = spec$IV,
+      forceIV = TRUE
+    ))
+  } else {
+    model <- without_warning_output(ESTIMATE(
+      model,
+      eqList = eq_name,
+      TSRANGE = estimation_range,
+      forceTSRANGE = TRUE,
+      estTech = "OLS"
+    ))
+  }
 }
+
+run_ur_tests <- function(eq_name, resid_vec, lags = 1) {
+  resid_vec <- resid_vec[is.finite(resid_vec)]
+  if (length(resid_vec) <= lags + 5) {
+    return(data.frame(
+      equation = eq_name,
+      n_obs = length(resid_vec),
+      adf_stat = NA_real_,
+      adf_cv_5pct = NA_real_,
+      adf_p = NA_real_,
+      adf_result = "not_available",
+      pp_stat = NA_real_,
+      pp_cv_5pct = NA_real_,
+      pp_result = "not_available",
+      kpss_stat = NA_real_,
+      kpss_cv_5pct = NA_real_,
+      kpss_result = "not_available",
+      overall = "not_available",
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  resid_ts <- stats::ts(resid_vec)
+  adf_obj <- tryCatch(urca::ur.df(resid_ts, type = "none", lags = lags), error = function(e) NULL)
+  pp_obj <- tryCatch(urca::ur.pp(resid_ts, type = "Z-tau", model = "constant", use.lag = lags), error = function(e) NULL)
+  kpss_obj <- tryCatch(urca::ur.kpss(resid_ts, type = "mu", lags = "short"), error = function(e) NULL)
+
+  if (is.null(adf_obj) || is.null(pp_obj) || is.null(kpss_obj)) {
+    return(data.frame(
+      equation = eq_name,
+      n_obs = length(resid_vec),
+      adf_stat = NA_real_,
+      adf_cv_5pct = NA_real_,
+      adf_p = NA_real_,
+      adf_result = "not_available",
+      pp_stat = NA_real_,
+      pp_cv_5pct = NA_real_,
+      pp_result = "not_available",
+      kpss_stat = NA_real_,
+      kpss_cv_5pct = NA_real_,
+      kpss_result = "not_available",
+      overall = "not_available",
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  adf_stat <- adf_obj@teststat[1]
+  adf_cv <- adf_obj@cval[1, ]
+  adf_p <- tryCatch(
+    suppressWarnings(tseries::adf.test(resid_ts, k = lags)$p.value),
+    error = function(e) NA_real_
+  )
+
+  pp_stat <- pp_obj@teststat[1]
+  pp_cv <- pp_obj@cval[1, ]
+  kpss_stat <- kpss_obj@teststat[1]
+  kpss_cv <- kpss_obj@cval[1, ]
+
+  adf_stationary <- adf_stat < adf_cv["5pct"]
+  pp_stationary <- pp_stat < pp_cv["5pct"]
+  kpss_stationary <- kpss_stat < kpss_cv["5pct"]
+
+  overall <- dplyr::case_when(
+    adf_stationary & pp_stationary & kpss_stationary ~ "stationary_supported_by_all",
+    adf_stationary & pp_stationary & !kpss_stationary ~ "conditionally_stationary_kpss_rejects",
+    (!adf_stationary | !pp_stationary) & kpss_stationary ~ "conditionally_nonstationary_adf_or_pp",
+    TRUE ~ "nonstationary_risk"
+  )
+
+  data.frame(
+    equation = eq_name,
+    n_obs = length(resid_vec),
+    adf_stat = round(adf_stat, 4),
+    adf_cv_5pct = round(adf_cv["5pct"], 4),
+    adf_p = round(adf_p, 4),
+    adf_result = ifelse(adf_stationary, "stationary", "nonstationary"),
+    pp_stat = round(pp_stat, 4),
+    pp_cv_5pct = round(pp_cv["5pct"], 4),
+    pp_result = ifelse(pp_stationary, "stationary", "nonstationary"),
+    kpss_stat = round(kpss_stat, 4),
+    kpss_cv_5pct = round(kpss_cv["5pct"], 4),
+    kpss_result = ifelse(kpss_stationary, "stationary", "nonstationary"),
+    overall = overall,
+    stringsAsFactors = FALSE
+  )
+}
+
+residual_unit_root_results <- lapply(names(iv_specs), function(eq_name) {
+  spec <- iv_specs[[eq_name]]
+  est_method <- iv_diagnostics$estimation[iv_diagnostics$equation == eq_name]
+  resid_vec <- structural_residuals(estimation_check_data, spec, est_method)
+  run_ur_tests(eq_name, resid_vec, lags = 1)
+}) |>
+  dplyr::bind_rows()
+
+print(residual_unit_root_results)
+
+readr::write_csv(
+  residual_unit_root_results,
+  "output/labourforce_v2_1_residual_unit_root_tests.csv"
+)
 
 lfpr_constant_adjustment <- list(
   lgtPartRate = TIMESERIES(

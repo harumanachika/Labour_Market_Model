@@ -1,0 +1,7 @@
+equation,min_first_stage_F,weak_iv_threshold,weak_instruments,dwh_F,dwh_df,dwh_p_value,estimation,note
+lgtPartRate,18.95208002905927,10,FALSE,11.709658655259073,2,2.8253440071684716e-4,IV,IV selected because DWH rejects exogeneity.
+lgtH,12.010723324168426,10,FALSE,6.658149692648437,3,0.0022847698385192686,IV,IV selected because DWH rejects exogeneity.
+lgtU_rate,97.96949541645122,10,FALSE,10.615290345457849,2,4.981371584988385e-4,IV,IV selected because DWH rejects exogeneity.
+W,4.029205136703138,10,TRUE,0.6093827642211106,3,0.6160102531642644,OLS,OLS selected because the excluded instruments are weak.
+P,1.5080087578103636,10,TRUE,6.170568082723814,2,0.0068826056947286106,OLS,OLS selected because the excluded instruments are weak.
+D_C,13.534626832155089,10,FALSE,0.007729420291541779,1,0.9306162110372359,OLS,OLS selected because DWH does not reject exogeneity.
